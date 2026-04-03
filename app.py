@@ -363,6 +363,62 @@ def api_voices_upload():
 
 
 # ---------------------------------------------------------------------------
+# Admin routes
+# ---------------------------------------------------------------------------
+
+_worker_status = {}
+
+
+@app.route("/admin")
+@require_auth
+@require_admin
+def admin():
+    users = list_users(DB_PATH)
+    invites = list_invites(DB_PATH)
+    user_map = {u["id"]: u["name"] for u in users}
+    return render_template("admin.html", users=users, invites=invites, user_map=user_map)
+
+
+@app.route("/api/admin/invites", methods=["POST"])
+@require_auth
+@require_admin
+def api_admin_create_invite():
+    invite = create_invite(DB_PATH, created_by=session["user_id"])
+    invite_url = url_for("invite_signup", token=invite["token"], _external=True)
+    return jsonify({"id": invite["id"], "token": invite["token"], "invite_url": invite_url}), 201
+
+
+@app.route("/api/admin/invites/<invite_id>", methods=["DELETE"])
+@require_auth
+@require_admin
+def api_admin_delete_invite(invite_id):
+    delete_invite(DB_PATH, invite_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/users/<user_id>", methods=["DELETE"])
+@require_auth
+@require_admin
+def api_admin_delete_user(user_id):
+    if user_id == session["user_id"]:
+        return jsonify({"error": "Cannot delete your own account."}), 400
+    target = get_user_by_id(DB_PATH, user_id)
+    if not target:
+        return jsonify({"error": "User not found."}), 404
+    if target["is_admin"]:
+        return jsonify({"error": "Cannot delete admin users."}), 400
+    delete_user(DB_PATH, user_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/worker-status")
+@require_auth
+@require_admin
+def api_admin_worker_status():
+    return jsonify(_worker_status)
+
+
+# ---------------------------------------------------------------------------
 # Worker integration
 # ---------------------------------------------------------------------------
 

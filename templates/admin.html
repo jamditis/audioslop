@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+
+{% block title %}admin — audioslop{% endblock %}
+
+{% block content %}
+<div class="space-y-10">
+
+    <!-- Page header -->
+    <section class="animate-in">
+        <h1 class="mb-1">Admin</h1>
+        <p style="color: var(--text-muted); font-size: 0.875rem;">Manage invite links, users, and worker status.</p>
+    </section>
+
+    <!-- Invite links -->
+    <section class="animate-in animate-delay-1">
+        <div class="flex items-center justify-between mb-4">
+            <h2>Invite links</h2>
+            <button id="new-invite-btn" class="btn btn-primary" style="font-size: 0.8rem; padding: 0.5rem 1rem;">
+                New invite
+            </button>
+        </div>
+
+        <div id="invite-result" class="hidden mb-4"></div>
+
+        {% if invites %}
+        <div class="card" style="padding: 0; overflow: hidden;">
+            <table class="table" id="invites-table">
+                <thead>
+                    <tr>
+                        <th style="padding-left: 1.25rem;">Token</th>
+                        <th>Created by</th>
+                        <th>Status</th>
+                        <th style="padding-right: 1.25rem;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for invite in invites %}
+                    <tr data-invite-id="{{ invite.id }}">
+                        <td style="padding-left: 1.25rem; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.8rem; color: var(--text-muted);">
+                            {{ invite.token[:16] }}…
+                        </td>
+                        <td>{{ user_map.get(invite.created_by, invite.created_by) }}</td>
+                        <td>
+                            {% if invite.used_by %}
+                            <span class="badge badge-done">used</span>
+                            {% else %}
+                            <span class="badge badge-review">open</span>
+                            {% endif %}
+                        </td>
+                        <td style="padding-right: 1.25rem;">
+                            {% if not invite.used_by %}
+                            <button
+                                class="btn btn-danger revoke-invite-btn"
+                                data-invite-id="{{ invite.id }}"
+                            >Revoke</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p id="no-invites-msg" style="color: var(--text-muted); font-size: 0.875rem;">No invite links yet. Create one above.</p>
+        {% endif %}
+
+        {% if not invites %}
+        <div id="invites-table-wrap" class="hidden card" style="padding: 0; overflow: hidden;">
+            <table class="table" id="invites-table-dynamic">
+                <thead>
+                    <tr>
+                        <th style="padding-left: 1.25rem;">Token</th>
+                        <th>Created by</th>
+                        <th>Status</th>
+                        <th style="padding-right: 1.25rem;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="invites-tbody"></tbody>
+            </table>
+        </div>
+        {% endif %}
+    </section>
+
+    <!-- Users -->
+    <section class="animate-in animate-delay-2">
+        <h2 class="mb-4">Users</h2>
+
+        {% if users %}
+        <div class="card" style="padding: 0; overflow: hidden;">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th style="padding-left: 1.25rem;">Name</th>
+                        <th>Role</th>
+                        <th>Joined</th>
+                        <th style="padding-right: 1.25rem;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr data-user-id="{{ user.id }}">
+                        <td style="padding-left: 1.25rem; color: var(--text-primary);">{{ user.name }}</td>
+                        <td>
+                            {% if user.is_admin %}
+                            <span class="badge badge-done">admin</span>
+                            {% else %}
+                            <span class="badge badge-pending">user</span>
+                            {% endif %}
+                        </td>
+                        <td style="color: var(--text-muted); font-size: 0.8rem; white-space: nowrap;">{{ user.created_at }}</td>
+                        <td style="padding-right: 1.25rem;">
+                            {% if not user.is_admin and user.id != session.get('user_id') %}
+                            <button
+                                class="btn btn-danger remove-user-btn"
+                                data-user-id="{{ user.id }}"
+                                data-user-name="{{ user.name }}"
+                            >Remove</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p style="color: var(--text-muted); font-size: 0.875rem;">No users found.</p>
+        {% endif %}
+    </section>
+
+    <!-- Worker status -->
+    <section class="animate-in animate-delay-3">
+        <h2 class="mb-4">Worker status</h2>
+        <div id="worker-status-card" class="card">
+            <p style="color: var(--text-muted); font-size: 0.875rem;">Loading...</p>
+        </div>
+    </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+
+    var currentUserId = {{ session.get('user_id') | tojson }};
+    var currentUserName = {{ session.get('user_name') | tojson }};
+
+    // ---------------------------------------------------------------------------
+    // Invite links
+    // ---------------------------------------------------------------------------
+
+    var newInviteBtn = document.getElementById('new-invite-btn');
+    var inviteResult = document.getElementById('invite-result');
+    var noInvitesMsg = document.getElementById('no-invites-msg');
+
+    // Table may already exist (Jinja-rendered) or be the dynamic fallback
+    var invitesTable = document.getElementById('invites-table') || document.getElementById('invites-table-dynamic');
+    var invitesTbody = invitesTable ? invitesTable.querySelector('tbody') : null;
+    var invitesTableWrap = document.getElementById('invites-table-wrap');
+
+    function showInviteUrl(url, inviteId) {
+        while (inviteResult.firstChild) inviteResult.removeChild(inviteResult.firstChild);
+
+        var bar = document.createElement('div');
+        bar.className = 'status-bar status-done';
+        bar.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 1rem;';
+
+        var urlSpan = document.createElement('span');
+        urlSpan.style.cssText = 'font-family: monospace; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+        urlSpan.textContent = url;
+
+        var copyBtn = document.createElement('button');
+        copyBtn.className = 'btn btn-ghost';
+        copyBtn.style.cssText = 'flex-shrink: 0; font-size: 0.8rem; padding: 0.3rem 0.75rem;';
+        copyBtn.textContent = 'Copy';
+        copyBtn.addEventListener('click', function () {
+            navigator.clipboard.writeText(url).then(function () {
+                copyBtn.textContent = 'Copied';
+                setTimeout(function () { copyBtn.textContent = 'Copy'; }, 2000);
+            }).catch(function () {
+                copyBtn.textContent = 'Copy failed';
+            });
+        });
+
+        bar.appendChild(urlSpan);
+        bar.appendChild(copyBtn);
+        inviteResult.appendChild(bar);
+        inviteResult.classList.remove('hidden');
+    }
+
+    function addInviteRow(invite, inviteUrl) {
+        if (!invitesTbody) return;
+
+        // Show table if it was hidden (first invite created dynamically)
+        if (invitesTableWrap) invitesTableWrap.classList.remove('hidden');
+        if (noInvitesMsg) noInvitesMsg.style.display = 'none';
+
+        var tr = document.createElement('tr');
+        tr.setAttribute('data-invite-id', invite.id);
+
+        var tokenTd = document.createElement('td');
+        tokenTd.style.cssText = 'padding-left: 1.25rem; font-family: monospace; font-size: 0.8rem; color: var(--text-muted);';
+        tokenTd.textContent = invite.token.substring(0, 16) + '\u2026';
+
+        var creatorTd = document.createElement('td');
+        creatorTd.textContent = currentUserName || 'you';
+
+        var statusTd = document.createElement('td');
+        var badge = document.createElement('span');
+        badge.className = 'badge badge-review';
+        badge.textContent = 'open';
+        statusTd.appendChild(badge);
+
+        var actionTd = document.createElement('td');
+        actionTd.style.paddingRight = '1.25rem';
+        var revokeBtn = document.createElement('button');
+        revokeBtn.className = 'btn btn-danger revoke-invite-btn';
+        revokeBtn.setAttribute('data-invite-id', invite.id);
+        revokeBtn.textContent = 'Revoke';
+        revokeBtn.addEventListener('click', function () { handleRevoke(revokeBtn); });
+        actionTd.appendChild(revokeBtn);
+
+        tr.appendChild(tokenTd);
+        tr.appendChild(creatorTd);
+        tr.appendChild(statusTd);
+        tr.appendChild(actionTd);
+        invitesTbody.appendChild(tr);
+    }
+
+    newInviteBtn.addEventListener('click', function () {
+        newInviteBtn.disabled = true;
+        newInviteBtn.textContent = 'Creating...';
+
+        fetch('/api/admin/invites', { method: 'POST' })
+        .then(function (res) {
+            return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+        })
+        .then(function (result) {
+            newInviteBtn.disabled = false;
+            newInviteBtn.textContent = 'New invite';
+            if (result.ok && result.data.invite_url) {
+                showInviteUrl(result.data.invite_url, result.data.id);
+                addInviteRow(result.data, result.data.invite_url);
+            } else {
+                var msg = (result.data && result.data.error) ? result.data.error : 'Failed to create invite.';
+                alert(msg);
+            }
+        })
+        .catch(function (err) {
+            newInviteBtn.disabled = false;
+            newInviteBtn.textContent = 'New invite';
+            alert('Error: ' + err.message);
+        });
+    });
+
+    function handleRevoke(btn) {
+        var inviteId = btn.getAttribute('data-invite-id');
+        if (!confirm('Revoke this invite link?')) return;
+
+        fetch('/api/admin/invites/' + inviteId, { method: 'DELETE' })
+        .then(function (res) {
+            return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+        })
+        .then(function (result) {
+            if (result.ok) {
+                var row = document.querySelector('tr[data-invite-id="' + inviteId + '"]');
+                if (row) row.parentNode.removeChild(row);
+            } else {
+                var msg = (result.data && result.data.error) ? result.data.error : 'Revoke failed.';
+                alert(msg);
+            }
+        })
+        .catch(function (err) {
+            alert('Error: ' + err.message);
+        });
+    }
+
+    // Wire up pre-rendered revoke buttons
+    document.querySelectorAll('.revoke-invite-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () { handleRevoke(btn); });
+    });
+
+    // ---------------------------------------------------------------------------
+    // Users
+    // ---------------------------------------------------------------------------
+
+    document.querySelectorAll('.remove-user-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var userId = btn.getAttribute('data-user-id');
+            var userName = btn.getAttribute('data-user-name');
+            if (!confirm('Remove user "' + userName + '"? This cannot be undone.')) return;
+
+            fetch('/api/admin/users/' + userId, { method: 'DELETE' })
+            .then(function (res) {
+                return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+            })
+            .then(function (result) {
+                if (result.ok) {
+                    var row = document.querySelector('tr[data-user-id="' + userId + '"]');
+                    if (row) row.parentNode.removeChild(row);
+                } else {
+                    var msg = (result.data && result.data.error) ? result.data.error : 'Remove failed.';
+                    alert(msg);
+                }
+            })
+            .catch(function (err) {
+                alert('Error: ' + err.message);
+            });
+        });
+    });
+
+    // ---------------------------------------------------------------------------
+    // Worker status
+    // ---------------------------------------------------------------------------
+
+    var workerCard = document.getElementById('worker-status-card');
+
+    function renderWorkerStatus(status) {
+        while (workerCard.firstChild) workerCard.removeChild(workerCard.firstChild);
+
+        if (!status || Object.keys(status).length === 0) {
+            var msg = document.createElement('p');
+            msg.style.cssText = 'color: var(--text-muted); font-size: 0.875rem;';
+            msg.textContent = 'No worker has checked in yet.';
+            workerCard.appendChild(msg);
+            return;
+        }
+
+        var grid = document.createElement('div');
+        grid.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;';
+
+        function addField(label, value) {
+            var cell = document.createElement('div');
+
+            var lbl = document.createElement('div');
+            lbl.className = 'label';
+            lbl.textContent = label;
+
+            var val = document.createElement('div');
+            val.style.cssText = 'color: var(--text-primary); font-size: 0.875rem;';
+            val.textContent = value || '—';
+
+            cell.appendChild(lbl);
+            cell.appendChild(val);
+            grid.appendChild(cell);
+        }
+
+        addField('Hostname', status.hostname);
+        addField('GPU', status.gpu_name);
+        addField('Last seen', status.last_seen);
+        addField('Current job', status.current_job || 'idle');
+
+        workerCard.appendChild(grid);
+    }
+
+    fetch('/api/admin/worker-status')
+    .then(function (res) { return res.json(); })
+    .then(function (data) { renderWorkerStatus(data); })
+    .catch(function () {
+        while (workerCard.firstChild) workerCard.removeChild(workerCard.firstChild);
+        var msg = document.createElement('p');
+        msg.style.cssText = 'color: var(--error); font-size: 0.875rem;';
+        msg.textContent = 'Failed to load worker status.';
+        workerCard.appendChild(msg);
+    });
+
+}());
+</script>
+{% endblock %}
