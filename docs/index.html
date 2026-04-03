@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>audioslop - document to audiobook</title>
+    <meta name="description" content="A document-to-audiobook pipeline with voice cloning and synced transcript highlighting.">
+    <meta property="og:title" content="audioslop">
+    <meta property="og:description" content="Document-to-audiobook pipeline with voice cloning and synced transcript player.">
+    <meta property="og:image" content="https://jamditis.github.io/audioslop/og-image.png">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://jamditis.github.io/audioslop/">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="audioslop">
+    <meta name="twitter:description" content="Document-to-audiobook pipeline with voice cloning and synced transcript player.">
+    <meta name="twitter:image" content="https://jamditis.github.io/audioslop/og-image.png">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>a</text></svg>">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #0a0a0a;
+            color: #e5e7eb;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        .container { max-width: 720px; text-align: center; }
+        .hero-img {
+            width: 100%;
+            max-width: 720px;
+            border-radius: 12px;
+            border: 1px solid #1f2937;
+            margin-bottom: 2rem;
+        }
+        h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+        }
+        .subtitle {
+            font-size: 1.25rem;
+            color: #9ca3af;
+            margin-bottom: 2rem;
+        }
+        .features {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 2.5rem;
+        }
+        .feature {
+            background: #111;
+            border: 1px solid #1f2937;
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            font-size: 0.9rem;
+            color: #d1d5db;
+            max-width: 200px;
+        }
+        .feature strong { display: block; margin-bottom: 0.25rem; color: #f3f4f6; }
+        .cta {
+            display: inline-block;
+            background: #f3f4f6;
+            color: #0a0a0a;
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+        .cta:hover { background: #d1d5db; }
+        .secondary {
+            display: inline-block;
+            color: #9ca3af;
+            margin-left: 1rem;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+        .secondary:hover { color: #e5e7eb; }
+        footer {
+            margin-top: 3rem;
+            font-size: 0.8rem;
+            color: #4b5563;
+        }
+        footer a { color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="og-image.png" alt="audioslop" class="hero-img">
+        <h1>audioslop</h1>
+        <p class="subtitle">Turn documents into audiobooks with your own voice.</p>
+        <div class="features">
+            <div class="feature">
+                <strong>Multi-format input</strong>
+                .docx, .pdf, .srt, .txt, .md
+            </div>
+            <div class="feature">
+                <strong>Voice cloning</strong>
+                Clone any voice from a 5-second clip
+            </div>
+            <div class="feature">
+                <strong>Synced transcript</strong>
+                Words highlight as the narrator reads
+            </div>
+        </div>
+        <a href="https://github.com/jamditis/audioslop" class="cta">View on GitHub</a>
+        <a href="https://github.com/jamditis/audioslop#setup" class="secondary">Setup guide</a>
+        <footer>
+            <p>MIT License. Built by <a href="https://github.com/jamditis">Joe Amditis</a>.</p>
+        </footer>
+    </div>
+</body>
+</html>

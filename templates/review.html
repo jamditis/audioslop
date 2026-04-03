@@ -4,97 +4,90 @@
 
 {% block content %}
 {# Header row #}
-<div class="flex items-start justify-between gap-4 mb-6">
-    <div class="flex items-center gap-3 flex-wrap">
-        <h1 class="text-xl font-semibold text-gray-100">{{ job.filename }}</h1>
+<div class="animate-in" style="display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem;">
+    <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+        <h1 class="heading-1" style="font-size:1.4rem;">{{ job.filename }}</h1>
         <span class="badge badge-{{ job.status }}">{{ job.status }}</span>
     </div>
-    <div class="flex items-center gap-3 shrink-0">
+    <div style="display:flex; align-items:center; gap:0.75rem; flex-shrink:0;">
         {% if job.status == "done" %}
-        <a href="{{ url_for('job_player', job_id=job.id) }}"
-           class="px-4 py-2 rounded-lg bg-green-700 hover:bg-green-600 text-white text-sm font-medium transition-colors">
-            Play
-        </a>
+        <a href="{{ url_for('job_player', job_id=job.id) }}" class="btn btn-primary">Play</a>
         {% endif %}
-        <a href="{{ url_for('index') }}"
-           class="text-sm text-gray-400 hover:text-gray-200 transition-colors">
-            &larr; Back
-        </a>
+        <a href="{{ url_for('index') }}" class="btn btn-ghost">&larr; Back</a>
     </div>
 </div>
 
 {# Status message bar #}
+<div class="animate-in animate-delay-1" style="margin-bottom:1.5rem;">
 {% if job.status == "pending" %}
-<div class="mb-6 px-4 py-3 rounded-lg bg-gray-800 text-gray-300 text-sm">
+<div class="status-bar status-pending">
     Waiting in line -- your file will be processed shortly.
 </div>
 {% elif job.status == "cleaning" %}
-<div class="mb-6 px-4 py-3 rounded-lg bg-blue-950 border border-blue-800 text-blue-300 text-sm">
+<div class="status-bar status-cleaning">
     Reading and preparing your document for audio...
 </div>
 {% elif job.status == "review" %}
-<div class="mb-6 px-4 py-3 rounded-lg bg-gray-800 text-gray-300 text-sm">
+<div class="status-bar status-review">
     Ready for review. Check the text below and click Generate when you're ready.
 </div>
 {% elif job.status == "synthesizing" %}
-<div class="mb-6 px-4 py-3 rounded-lg bg-amber-950 border border-amber-800 text-amber-300 text-sm">
+<div class="status-bar status-synthesizing">
     Generating audio...
 </div>
 {% elif job.status == "done" %}
-<div class="mb-6 px-4 py-3 rounded-lg bg-green-950 border border-green-800 text-green-300 text-sm">
+<div class="status-bar status-done">
     Your audiobook is ready. Click Play to listen.
 </div>
 {% elif job.status == "failed" %}
-<div class="mb-6 px-4 py-3 rounded-lg bg-red-950 border border-red-800 text-red-300 text-sm">
-    <p class="font-medium">{{ job.error_msg or "An error occurred." }}</p>
+<div class="status-bar status-failed">
+    <p style="margin:0 0 0.5rem;">{{ job.error_msg or "An error occurred." }}</p>
     {% if job.error_detail %}
-    <details class="mt-2">
-        <summary class="cursor-pointer text-red-400 hover:text-red-200 select-none">Show technical details</summary>
-        <pre class="mt-2 text-xs text-red-300 bg-red-950 border border-red-900 rounded p-3 overflow-x-auto whitespace-pre-wrap select-all">{{ job.error_detail }}</pre>
+    <details>
+        <summary style="cursor:pointer; color:var(--error); opacity:0.8; user-select:none;">Show technical details</summary>
+        <pre style="margin-top:0.5rem; font-size:0.75rem; color:var(--error); background:var(--error-dim); border:1px solid rgba(196,92,92,0.2); border-radius:6px; padding:0.75rem; overflow-x:auto; white-space:pre-wrap; user-select:all;">{{ job.error_detail }}</pre>
     </details>
     {% endif %}
 </div>
 {% elif job.status == "cancelled" %}
-<div class="mb-6 px-4 py-3 rounded-lg bg-gray-800 text-gray-400 text-sm">
+<div class="status-bar status-cancelled">
     This job was cancelled.
 </div>
 {% endif %}
+</div>
 
 {# Progress bar -- only shown when synthesizing #}
 {% if job.status == "synthesizing" %}
-<div class="mb-6" id="progress-section">
-    <div class="flex items-center justify-between text-sm text-gray-400 mb-1">
+<div class="animate-in animate-delay-2" id="progress-section" style="margin-bottom:1.5rem;">
+    <div style="display:flex; align-items:center; justify-content:space-between; font-size:0.8rem; color:var(--text-muted); margin-bottom:0.4rem;">
         <span id="progress-label">Segment {{ job.segments_done }} of {{ job.segments_total }}</span>
         <span id="progress-pct">{{ job.progress_pct }}%</span>
     </div>
-    <div class="h-2 bg-gray-800 rounded-full overflow-hidden">
-        <div id="progress-bar"
-             class="h-full bg-amber-500 rounded-full transition-all duration-500"
-             style="width: {{ job.progress_pct }}%"></div>
+    <div class="progress-track">
+        <div id="progress-bar" class="progress-fill" style="width: {{ job.progress_pct }}%"></div>
     </div>
 </div>
 {% endif %}
 
 {# Segments list #}
-<div class="space-y-4 mb-8">
+<div class="animate-in animate-delay-2" style="display:flex; flex-direction:column; gap:1rem; margin-bottom:2rem;">
     {% for seg in segments %}
-    <div class="border border-gray-800 rounded-lg p-4">
+    <div class="card">
         {# Segment header #}
-        <div class="flex items-center gap-3 mb-3">
-            <span class="text-sm font-medium {% if seg.is_title %}text-gray-200{% else %}text-gray-400{% endif %}">
+        <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.75rem; flex-wrap:wrap;">
+            <span style="font-size:0.8rem; color:var(--text-secondary);">
                 {% if seg.is_title %}Title{% else %}Paragraph{% endif %} {{ seg.seg_index + 1 }}
             </span>
-            <span class="text-xs text-gray-600">{{ seg.chunk_file }}</span>
+            <span style="font-size:0.75rem; color:var(--text-muted);">{{ seg.chunk_file }}</span>
             {% if seg.accuracy is not none %}
-            <span class="badge {% if seg.accuracy >= 0.9 %}bg-green-900 text-green-300{% else %}bg-yellow-900 text-yellow-300{% endif %}">
+            <span class="badge" style="{% if seg.accuracy >= 0.9 %}background:var(--success-dim); color:var(--success);{% else %}background:var(--accent-dim); color:var(--accent);{% endif %}">
                 {{ "%.0f"|format(seg.accuracy * 100) }}% accuracy
             </span>
             {% endif %}
         </div>
         {# Editable textarea #}
         <textarea
-            class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 resize-y leading-relaxed
-                   {% if job.status in ('review', 'failed') %}focus:outline-none focus:border-blue-600{% else %}opacity-60 cursor-default{% endif %}"
+            class="textarea"
             rows="3"
             {% if job.status not in ('review', 'failed') %}readonly{% endif %}
             onchange="saveSegment(JOB_ID, {{ seg.seg_index }}, this.value)"
@@ -104,20 +97,17 @@
 </div>
 
 {# Action buttons #}
-<div class="flex items-center gap-3 mb-8">
+<div class="animate-in animate-delay-3" style="display:flex; align-items:center; gap:0.75rem; margin-bottom:2rem;">
     {% if job.status == "review" %}
-    <button onclick="startSynthesis(JOB_ID)"
-            class="px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium transition-colors">
+    <button onclick="startSynthesis(JOB_ID)" class="btn btn-primary">
         Generate audio
     </button>
     {% elif job.status == "failed" %}
-    <button onclick="startSynthesis(JOB_ID)"
-            class="px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium transition-colors">
+    <button onclick="startSynthesis(JOB_ID)" class="btn btn-primary">
         Try again
     </button>
     {% elif job.status == "synthesizing" %}
-    <button onclick="cancelJob(JOB_ID)"
-            class="px-5 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium transition-colors">
+    <button onclick="cancelJob(JOB_ID)" class="btn btn-secondary">
         Cancel
     </button>
     {% endif %}
@@ -125,16 +115,16 @@
 
 {# Activity log #}
 {% if activities %}
-<details class="border border-gray-800 rounded-lg">
-    <summary class="px-4 py-3 cursor-pointer text-sm text-gray-400 hover:text-gray-200 select-none">
+<details class="animate-in animate-delay-4 card" style="padding:0;">
+    <summary style="padding:0.75rem 1rem; cursor:pointer; font-size:0.875rem; color:var(--text-secondary); user-select:none;">
         Activity log
     </summary>
-    <div class="border-t border-gray-800 divide-y divide-gray-900">
+    <div style="border-top:1px solid var(--border);">
         {% for entry in activities %}
-        <div class="px-4 py-2 flex items-start gap-4 text-xs">
-            <span class="text-gray-600 shrink-0 font-mono">{{ entry.timestamp }}</span>
-            <span class="{% if entry.event == 'error' %}text-red-400{% else %}text-gray-400{% endif %}">
-                {{ entry.message }}
+        <div class="activity-entry">
+            <span class="activity-ts">{{ entry.ts }}</span>
+            <span class="{% if entry.event == 'error' %}activity-error{% else %}activity-msg{% endif %}">
+                {{ entry.msg }}
             </span>
         </div>
         {% endfor %}
