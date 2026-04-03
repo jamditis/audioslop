@@ -202,6 +202,10 @@ def job_player(job_id):
 @app.route("/api/upload", methods=["POST"])
 @require_auth
 def api_upload():
+    import traceback
+    from audioslop import EXTRACTORS, chunk_text, clean_for_tts
+    from synthesize import is_title_line, split_into_segments
+
     file = request.files.get("file")
     if not file or not file.filename:
         return jsonify({"error": "No file provided."}), 400
@@ -231,10 +235,65 @@ def api_upload():
     save_path = UPLOAD_DIR / f"{job_id}_{file.filename}"
     file.save(str(save_path))
 
-    update_job(DB_PATH, job_id, status="cleaning")
-
     job_dir = JOBS_DIR / job_id
     log_activity(job_dir, "upload", f"Uploaded {file.filename}")
+
+    try:
+        # Detect extension (handle double extensions like .md.docx)
+        if save_path.name.lower().endswith(".md.docx"):
+            detected_ext = ".docx"
+        else:
+            detected_ext = save_path.suffix.lower()
+
+        extractor = EXTRACTORS.get(detected_ext)
+        if not extractor:
+            raise ValueError(f"No extractor for extension '{detected_ext}'")
+
+        raw_text = extractor(save_path)
+        if not raw_text or not raw_text.strip():
+            raise ValueError("Extracted text is empty")
+
+        cleaned = clean_for_tts(raw_text)
+        chunks = chunk_text(cleaned, max_chars=4000)
+
+        cleaned_dir = job_dir / "cleaned"
+        cleaned_dir.mkdir(parents=True, exist_ok=True)
+
+        seg_index = 0
+        for i, chunk_content in enumerate(chunks):
+            chunk_filename = f"part{i:03d}.txt"
+            chunk_path = cleaned_dir / chunk_filename
+            chunk_path.write_text(chunk_content, encoding="utf-8")
+
+            segments = split_into_segments(
+                chunk_content,
+                title_pause=title_pause,
+                para_pause=para_pause,
+            )
+
+            for seg in segments:
+                create_segment(
+                    DB_PATH,
+                    job_id=job_id,
+                    seg_index=seg_index,
+                    chunk_file=chunk_filename,
+                    source_text=seg["text"],
+                    is_title=1 if is_title_line(seg["text"]) else 0,
+                    pause_after=seg["pause_after"],
+                )
+                seg_index += 1
+
+        update_job(DB_PATH, job_id, status="review", segments_total=seg_index)
+        log_activity(
+            job_dir,
+            "clean_done",
+            f"Cleaning complete: {len(chunks)} chunk(s), {seg_index} segment(s)",
+        )
+
+    except Exception as e:
+        tb = traceback.format_exc()
+        update_job(DB_PATH, job_id, status="failed", error_msg=str(e), error_detail=tb)
+        log_activity(job_dir, "clean_error", str(e))
 
     return jsonify({"job_id": job_id}), 201
 
@@ -322,11 +381,6 @@ def api_cancel_job(job_id):
     job = get_job(DB_PATH, job_id)
     if not job:
         return jsonify({"error": "Job not found."}), 404
-
-    try:
-        get_worker().cancel_job(job_id)
-    except Exception:
-        pass
 
     update_job(DB_PATH, job_id, status="cancelled")
     job_dir = JOBS_DIR / job_id
@@ -545,22 +599,6 @@ def api_worker_heartbeat():
 
 
 # ---------------------------------------------------------------------------
-# Worker integration
-# ---------------------------------------------------------------------------
-
-_worker = None
-
-
-def get_worker():
-    global _worker
-    if _worker is None:
-        from worker import Worker
-        _worker = Worker(DB_PATH, JOBS_DIR, UPLOAD_DIR, REF_DIR)
-        _worker.start()
-    return _worker
-
-
-# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -569,5 +607,4 @@ if __name__ == "__main__":
     JOBS_DIR.mkdir(exist_ok=True)
     REF_DIR.mkdir(exist_ok=True)
     init_db(DB_PATH)
-    get_worker()  # Start background worker
     app.run(debug=True, port=5000, use_reloader=False)
