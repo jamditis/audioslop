@@ -114,3 +114,12 @@ The background worker processes one job at a time (FIFO). It runs as a daemon th
 - `jobs/{id}/activity.jsonl` -- Timestamped event log
 - `audioslop.db` -- SQLite database (jobs + segments tables)
 - `ref/` -- Voice reference clips for F5-TTS cloning
+
+### Design system
+
+The UI uses a warm editorial dark theme:
+- **Fonts:** Young Serif (display/headings), Outfit (body) via Google Fonts CDN
+- **Colors:** CSS custom properties in `static/app.css` -- amber accent (`--accent: #c2851a`), warm dark backgrounds
+- **Components:** Custom CSS classes (`.card`, `.btn`, `.badge`, `.status-bar`, etc.) -- prefer these over raw Tailwind color utilities
+- **Player:** Immersive reader with reading settings (font size, theme: dark/light/sepia, line spacing), preferences saved to localStorage
+- **Responsive:** Tested at 390px (iPhone) and 1280px. Settings grid collapses to single column on mobile.
