@@ -73,29 +73,42 @@
             }
           }
 
-          if (words.length > 0) {
-            words.forEach(function (w) {
+          if (words.length > 0 && seg.source_text) {
+            // Use source text words with Whisper timing data
+            var sourceWords = seg.source_text.split(/\s+/);
+            sourceWords.forEach(function (srcWord, wIdx) {
               var span = document.createElement("span");
               span.className = "word";
-              span.textContent = w.word + " ";
+              span.textContent = srcWord + " ";
 
-              var gStart = globalOffset + w.start;
-              var gEnd = globalOffset + w.end;
-              span.setAttribute("data-start", gStart.toFixed(3));
-              span.setAttribute("data-end", gEnd.toFixed(3));
+              // Map timing from Whisper data by index (best effort)
+              if (wIdx < words.length) {
+                var w = words[wIdx];
+                var gStart = globalOffset + w.start;
+                var gEnd = globalOffset + w.end;
+                span.setAttribute("data-start", gStart.toFixed(3));
+                span.setAttribute("data-end", gEnd.toFixed(3));
 
-              span.addEventListener("click", function () {
-                audio.currentTime = gStart;
-                if (audio.paused) {
-                  audio.play();
-                }
-              });
+                span.addEventListener("click", function () {
+                  audio.currentTime = gStart;
+                  if (audio.paused) audio.play();
+                });
 
-              timeline.push({ globalStart: gStart, globalEnd: gEnd, el: span });
+                timeline.push({ globalStart: gStart, globalEnd: gEnd, el: span });
+              } else {
+                // More source words than Whisper words -- use last known timing
+                var lastW = words[words.length - 1];
+                var fallbackStart = globalOffset + lastW.end;
+                span.setAttribute("data-start", fallbackStart.toFixed(3));
+                span.setAttribute("data-end", fallbackStart.toFixed(3));
+              }
+
               container.appendChild(span);
             });
+          } else if (seg.source_text) {
+            container.textContent = seg.source_text;
           } else {
-            container.textContent = seg.source_text || "";
+            container.textContent = "(no text)";
           }
 
           transcriptEl.appendChild(container);
@@ -298,6 +311,40 @@
     if (!isUserSeeking) {
       seekBar.value = audio.currentTime;
       timeCurrent.textContent = fmt(audio.currentTime);
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // Keyboard shortcuts
+  // -----------------------------------------------------------------------
+
+  document.addEventListener("keydown", function (e) {
+    // Don't capture if user is in an input/textarea
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
+
+    switch (e.code) {
+      case "Space":
+        e.preventDefault();
+        if (audio.paused) audio.play(); else audio.pause();
+        break;
+      case "ArrowLeft":
+        e.preventDefault();
+        audio.currentTime = Math.max(0, audio.currentTime - 5);
+        break;
+      case "ArrowRight":
+        e.preventDefault();
+        audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 5);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        audio.volume = Math.min(1, audio.volume + 0.1);
+        volumeSlider.value = audio.volume;
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        audio.volume = Math.max(0, audio.volume - 0.1);
+        volumeSlider.value = audio.volume;
+        break;
     }
   });
 
