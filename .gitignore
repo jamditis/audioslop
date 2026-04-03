@@ -39,3 +39,5 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+test-screenshots/
+.playwright-mcp/
