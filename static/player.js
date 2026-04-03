@@ -20,6 +20,16 @@
   var currentIdx = -1;
   var isUserSeeking = false;
 
+  // Load audio from R2 presigned URL
+  fetch("/api/job/" + JOB_ID + "/audio-url")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.url) {
+        audio.src = data.url;
+        audio.load();
+      }
+    });
+
   // -----------------------------------------------------------------------
   // Time formatting
   // -----------------------------------------------------------------------

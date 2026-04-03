@@ -391,10 +391,21 @@ def api_cancel_job(job_id):
 @app.route("/api/job/<job_id>/audio/<path:filename>")
 @require_auth
 def api_serve_audio(job_id, filename):
-    audio_dir = JOBS_DIR / job_id / "audio"
-    if not audio_dir.exists():
-        return "Audio not found.", 404
-    return send_from_directory(str(audio_dir), filename)
+    from r2 import presigned_url
+    r2_key = job_id + "/" + filename
+    url = presigned_url(r2_key)
+    return redirect(url)
+
+
+@app.route("/api/job/<job_id>/audio-url")
+@require_auth
+def api_audio_url(job_id):
+    job = get_job(DB_PATH, job_id)
+    if not job or not job["final_audio"]:
+        return jsonify({"error": "Audio not ready."}), 404
+    from r2 import presigned_url
+    url = presigned_url(job["final_audio"])
+    return jsonify({"url": url})
 
 
 @app.route("/api/job/<job_id>/activity")

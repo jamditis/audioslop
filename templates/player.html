@@ -205,9 +205,7 @@
 {% endblock %}
 
 {% block content %}
-<audio id="audio" preload="auto" style="display:none;">
-    <source src="/api/job/{{ job.id }}/audio/{{ job.final_audio }}" type="audio/mpeg">
-</audio>
+<audio id="audio" preload="auto" style="display:none;"></audio>
 
 <script>var JOB_ID = "{{ job.id }}";</script>
 
