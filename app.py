@@ -1,7 +1,9 @@
 """Flask web UI for audioslop document-to-audiobook pipeline."""
 
+import json
 import os
 import shutil
+from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 
@@ -72,6 +74,16 @@ def require_admin(f):
             return redirect(url_for("login"))
         if not session.get("is_admin"):
             return "Forbidden.", 403
+        return f(*args, **kwargs)
+    return decorated
+
+
+def require_worker_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.headers.get("Authorization", "")
+        if auth != "Bearer " + WORKER_API_KEY:
+            return jsonify({"error": "Unauthorized"}), 401
         return f(*args, **kwargs)
     return decorated
 
@@ -416,6 +428,120 @@ def api_admin_delete_user(user_id):
 @require_admin
 def api_admin_worker_status():
     return jsonify(_worker_status)
+
+
+# ---------------------------------------------------------------------------
+# Worker API (called by remote GPU worker over Tailscale)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/worker/jobs")
+@require_worker_auth
+def api_worker_jobs():
+    status = request.args.get("status")
+    jobs = list_jobs(DB_PATH, limit=50)
+    if status:
+        jobs = [j for j in jobs if j["status"] == status]
+    # Return oldest first (list_jobs returns newest first)
+    jobs = list(reversed(jobs))
+    fields = ("id", "filename", "speed", "voice_ref", "title_pause", "para_pause", "segments_total")
+    return jsonify([{k: j[k] for k in fields} for j in jobs])
+
+
+@app.route("/api/worker/job/<job_id>/segments")
+@require_worker_auth
+def api_worker_job_segments(job_id):
+    job = get_job(DB_PATH, job_id)
+    if not job:
+        return jsonify({"error": "Job not found."}), 404
+    segments = get_segments(DB_PATH, job_id)
+    fields = ("seg_index", "source_text", "is_title", "pause_after", "audio_file")
+    return jsonify([{k: s[k] for k in fields} for s in segments])
+
+
+@app.route("/api/worker/ref/<path:filename>")
+@require_worker_auth
+def api_worker_ref(filename):
+    return send_from_directory(str(REF_DIR), filename)
+
+
+@app.route("/api/worker/job/<job_id>/segment/<int:seg_index>/complete", methods=["POST"])
+@require_worker_auth
+def api_worker_segment_complete(job_id, seg_index):
+    job = get_job(DB_PATH, job_id)
+    if not job:
+        return jsonify({"error": "Job not found."}), 404
+
+    data = request.get_json(silent=True) or {}
+    audio_r2_key = data.get("audio_r2_key")
+    accuracy = data.get("accuracy")
+    duration_seconds = data.get("duration_seconds")
+    word_timings = data.get("word_timings")
+
+    update_segment(
+        DB_PATH, job_id, seg_index,
+        audio_file=audio_r2_key,
+        accuracy=accuracy,
+        duration_seconds=duration_seconds,
+        word_timings_json=json.dumps(word_timings) if word_timings is not None else None,
+    )
+
+    # Recalculate progress from DB to avoid races
+    segments_done = job["segments_done"] + 1
+    segments_total = job["segments_total"] or 1
+    progress_pct = int(segments_done / segments_total * 100)
+    update_job(DB_PATH, job_id, segments_done=segments_done, progress_pct=progress_pct)
+
+    job_dir = JOBS_DIR / job_id
+    log_activity(job_dir, "segment_done", f"Segment {seg_index} complete")
+
+    return jsonify({"ok": True})
+
+
+@app.route("/api/worker/job/<job_id>/complete", methods=["POST"])
+@require_worker_auth
+def api_worker_job_complete(job_id):
+    job = get_job(DB_PATH, job_id)
+    if not job:
+        return jsonify({"error": "Job not found."}), 404
+
+    data = request.get_json(silent=True) or {}
+    final_audio = data.get("final_audio")
+
+    update_job(DB_PATH, job_id, status="done", progress_pct=100, final_audio=final_audio)
+
+    job_dir = JOBS_DIR / job_id
+    log_activity(job_dir, "synthesis_done", "Synthesis complete")
+
+    return jsonify({"ok": True})
+
+
+@app.route("/api/worker/job/<job_id>/fail", methods=["POST"])
+@require_worker_auth
+def api_worker_job_fail(job_id):
+    job = get_job(DB_PATH, job_id)
+    if not job:
+        return jsonify({"error": "Job not found."}), 404
+
+    data = request.get_json(silent=True) or {}
+    error_msg = data.get("error_msg", "Worker error")
+    error_detail = data.get("error_detail")
+
+    update_job(DB_PATH, job_id, status="failed", error_msg=error_msg, error_detail=error_detail)
+
+    job_dir = JOBS_DIR / job_id
+    log_activity(job_dir, "synthesis_failed", error_msg)
+
+    return jsonify({"ok": True})
+
+
+@app.route("/api/worker/heartbeat", methods=["POST"])
+@require_worker_auth
+def api_worker_heartbeat():
+    data = request.get_json(silent=True) or {}
+    _worker_status.clear()
+    _worker_status.update(data)
+    _worker_status["last_seen"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------
