@@ -2,63 +2,268 @@
 
 {% block title %}{{ job.filename }} -- audioslop player{% endblock %}
 
-{% block content %}
-<div class="flex items-center justify-between mb-6">
-    <div class="flex items-center gap-3">
-        <h1 class="text-xl font-semibold text-gray-100">{{ job.filename }}</h1>
-        <span class="badge badge-done">done</span>
-    </div>
-    <a href="{{ url_for('job_review', job_id=job.id) }}"
-       class="text-sm text-gray-400 hover:text-gray-200 transition-colors">
-        &larr; Back to review
-    </a>
-</div>
+{% block head %}
+<style>
+    /* Reading settings bar */
+    .reading-settings {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.25rem;
+        padding: 0.75rem 1rem;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+    }
 
-<audio id="audio" preload="auto" class="hidden">
+    .setting-group {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .setting-label {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-right: 0.25rem;
+        white-space: nowrap;
+    }
+
+    .setting-btn {
+        padding: 0.2rem 0.55rem;
+        font-size: 0.75rem;
+        font-family: var(--font-body);
+        color: var(--text-secondary);
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        cursor: pointer;
+        transition: all 0.15s;
+        line-height: 1.4;
+    }
+
+    .setting-btn:hover {
+        color: var(--text-primary);
+        border-color: var(--border-light);
+    }
+
+    .setting-btn.active {
+        background: var(--accent-dim);
+        color: var(--accent);
+        border-color: var(--accent);
+    }
+
+    /* Settings collapse toggle */
+    .settings-toggle {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-family: var(--font-body);
+        padding: 0.2rem 0;
+        transition: color 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .settings-toggle:hover { color: var(--text-secondary); }
+
+    .settings-toggle .chevron {
+        display: inline-block;
+        transition: transform 0.2s;
+        font-size: 0.6rem;
+    }
+
+    .settings-toggle.open .chevron {
+        transform: rotate(180deg);
+    }
+
+    .settings-body {
+        overflow: hidden;
+        max-height: 0;
+        opacity: 0;
+        transition: max-height 0.3s ease, opacity 0.2s ease;
+    }
+
+    .settings-body.open {
+        max-height: 200px;
+        opacity: 1;
+    }
+
+    /* Player layout tweaks */
+    .player-time {
+        font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        min-width: 2.75rem;
+        text-align: right;
+    }
+
+    .player-time-total {
+        text-align: left;
+    }
+
+    .player-controls-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    .player-speed-select {
+        background: var(--bg-elevated);
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        font-family: var(--font-body);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.3rem 0.5rem;
+        cursor: pointer;
+        outline: none;
+    }
+
+    .player-speed-select:focus {
+        border-color: var(--accent);
+    }
+
+    .player-volume-group {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .player-volume-group input[type="range"] {
+        width: 5rem;
+    }
+
+    /* Header row */
+    .player-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .player-header-left {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .player-filename {
+        font-family: var(--font-display);
+        font-size: 1.5rem;
+        font-weight: 400;
+        letter-spacing: -0.01em;
+        color: var(--text-primary);
+        line-height: 1.3;
+    }
+
+    .player-back-link {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        text-decoration: none;
+        transition: color 0.2s;
+        white-space: nowrap;
+    }
+
+    .player-back-link:hover { color: var(--text-secondary); }
+
+    /* Keyboard hints */
+    .keyboard-hints {
+        color: var(--text-muted);
+        font-size: 0.75rem;
+        text-align: center;
+        margin-top: 0.5rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .player-header {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .reading-settings {
+            flex-direction: column;
+            gap: 0.75rem;
+            padding: 0.6rem 0.75rem;
+        }
+        .player-controls-row {
+            gap: 0.5rem;
+        }
+        .player-volume-group input[type="range"] {
+            width: 4rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<audio id="audio" preload="auto" style="display:none;">
     <source src="/api/job/{{ job.id }}/audio/{{ job.final_audio }}" type="audio/mpeg">
 </audio>
 
 <script>var JOB_ID = "{{ job.id }}";</script>
 
-{# Controls bar #}
-<div class="bg-gray-900 rounded-xl p-5 mb-6 border border-gray-800">
-    {# Seek bar row #}
-    <div class="flex items-center gap-3 mb-4">
-        <span id="time-current" class="text-xs text-gray-400 font-mono w-10 text-right">0:00</span>
-        <input id="seek-bar" type="range" min="0" max="100" value="0" step="0.1"
-               class="flex-1 h-1.5 accent-yellow-500 cursor-pointer">
-        <span id="time-total" class="text-xs text-gray-400 font-mono w-10">0:00</span>
+{# -- Header row -- #}
+<div class="player-header animate-in">
+    <div class="player-header-left">
+        <span class="player-filename">{{ job.filename }}</span>
+        <span class="badge badge-done">done</span>
     </div>
-    {# Controls row #}
-    <div class="flex items-center justify-center gap-4 flex-wrap">
-        {# Skip back 10s #}
-        <button id="btn-back" class="p-2 text-gray-400 hover:text-white transition-colors" title="Back 10s">
+    <a href="{{ url_for('job_review', job_id=job.id) }}" class="player-back-link">
+        &larr; Back to review
+    </a>
+</div>
+
+{# -- Player card -- #}
+<div class="player-card animate-in animate-delay-1" style="margin-bottom: 1rem;">
+    {# Seek bar #}
+    <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">
+        <span id="time-current" class="player-time">0:00</span>
+        <input id="seek-bar" type="range" min="0" max="100" value="0" step="0.1" class="seek-bar">
+        <span id="time-total" class="player-time player-time-total">0:00</span>
+    </div>
+
+    {# Controls #}
+    <div class="player-controls-row">
+        {# Skip back #}
+        <button id="btn-back" class="player-btn-ghost" title="Back 10s">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M1 4v6h6"/>
                 <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
                 <text x="12" y="16" text-anchor="middle" fill="currentColor" stroke="none" font-size="8" font-weight="600">10</text>
             </svg>
         </button>
+
         {# Play/pause #}
-        <button id="btn-play" class="w-12 h-12 rounded-full bg-white flex items-center justify-center hover:bg-gray-200 transition-colors" title="Play/pause">
-            <svg id="icon-play" width="22" height="22" viewBox="0 0 24 24" fill="#111" stroke="none">
+        <button id="btn-play" class="player-btn" title="Play/pause">
+            <svg id="icon-play" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                 <polygon points="6,3 20,12 6,21"/>
             </svg>
-            <svg id="icon-pause" width="22" height="22" viewBox="0 0 24 24" fill="#111" stroke="none" class="hidden">
+            <svg id="icon-pause" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none" style="display:none;">
                 <rect x="5" y="3" width="4" height="18"/>
                 <rect x="15" y="3" width="4" height="18"/>
             </svg>
         </button>
-        {# Skip forward 10s #}
-        <button id="btn-forward" class="p-2 text-gray-400 hover:text-white transition-colors" title="Forward 10s">
+
+        {# Skip forward #}
+        <button id="btn-forward" class="player-btn-ghost" title="Forward 10s">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M23 4v6h-6"/>
                 <path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/>
                 <text x="12" y="16" text-anchor="middle" fill="currentColor" stroke="none" font-size="8" font-weight="600">10</text>
             </svg>
         </button>
-        {# Speed dropdown #}
-        <select id="speed-select" class="bg-gray-800 text-gray-300 text-sm rounded-lg px-2 py-1.5 border border-gray-700 focus:outline-none focus:border-gray-500 cursor-pointer">
+
+        {# Speed #}
+        <select id="speed-select" class="player-speed-select">
             <option value="0.5">0.5x</option>
             <option value="0.75">0.75x</option>
             <option value="1" selected>1x</option>
@@ -66,40 +271,177 @@
             <option value="1.5">1.5x</option>
             <option value="2">2x</option>
         </select>
-        {# Volume slider #}
-        <div class="flex items-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-400">
+
+        {# Volume #}
+        <div class="player-volume-group">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-muted);">
                 <polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/>
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
             </svg>
-            <input id="volume-slider" type="range" min="0" max="1" value="1" step="0.01"
-                   class="w-20 h-1 accent-gray-400 cursor-pointer">
+            <input id="volume-slider" type="range" min="0" max="1" value="1" step="0.01">
         </div>
-        {# Download link #}
-        <a href="/api/job/{{ job.id }}/audio/{{ job.final_audio }}" download
-           class="p-2 text-gray-400 hover:text-white transition-colors" title="Download audio">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
+
+        {# Download #}
+        <a href="/api/job/{{ job.id }}/audio/{{ job.final_audio }}" download class="btn btn-ghost" title="Download audio">
+            Download
         </a>
+    </div>
+
+    <p class="keyboard-hints">
+        Space: play/pause &nbsp; Left/Right: seek 5s &nbsp; Up/Down: volume
+    </p>
+</div>
+
+{# -- Reading settings -- #}
+<div class="animate-in animate-delay-2" style="margin-bottom: 1rem;">
+    <button class="settings-toggle" id="settings-toggle" type="button">
+        <span class="chevron">&#9660;</span> Reading settings
+    </button>
+    <div class="settings-body" id="settings-body">
+        <div class="reading-settings" style="margin-top: 0.4rem;">
+            <div class="setting-group">
+                <span class="setting-label">Size</span>
+                <button class="setting-btn" data-group="font" data-value="0.9rem" type="button">S</button>
+                <button class="setting-btn active" data-group="font" data-value="1.05rem" type="button">M</button>
+                <button class="setting-btn" data-group="font" data-value="1.25rem" type="button">L</button>
+                <button class="setting-btn" data-group="font" data-value="1.5rem" type="button">XL</button>
+            </div>
+            <div class="setting-group">
+                <span class="setting-label">Theme</span>
+                <button class="setting-btn active" data-group="theme" data-value="dark" type="button">Dark</button>
+                <button class="setting-btn" data-group="theme" data-value="light" type="button">Light</button>
+                <button class="setting-btn" data-group="theme" data-value="sepia" type="button">Sepia</button>
+            </div>
+            <div class="setting-group">
+                <span class="setting-label">Spacing</span>
+                <button class="setting-btn" data-group="spacing" data-value="1.5" type="button">Tight</button>
+                <button class="setting-btn active" data-group="spacing" data-value="1.85" type="button">Normal</button>
+                <button class="setting-btn" data-group="spacing" data-value="2.2" type="button">Wide</button>
+            </div>
+        </div>
     </div>
 </div>
 
-<p class="text-xs text-gray-600 text-center mt-2 mb-4">
-    Space: play/pause &nbsp; Left/Right: seek 5s &nbsp; Up/Down: volume
-</p>
-
-{# Transcript panel #}
-<div class="bg-gray-900 rounded-xl p-6 border border-gray-800">
-    <div id="transcript" class="transcript-scroll leading-relaxed text-gray-200">
+{# -- Transcript card -- #}
+<div class="card animate-in animate-delay-3" id="transcript-container">
+    <div id="transcript" class="transcript-scroll">
         Loading transcript...
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script>
+(function () {
+    "use strict";
+
+    var transcript = document.getElementById("transcript");
+    var container = document.getElementById("transcript-container");
+    var toggleBtn = document.getElementById("settings-toggle");
+    var settingsBody = document.getElementById("settings-body");
+    var STORAGE_KEY = "audioslop-reader-prefs";
+
+    // Theme presets (applied to transcript container)
+    var themes = {
+        dark:  { bg: "", color: "" },
+        light: { bg: "#faf8f5", color: "#2a2520" },
+        sepia: { bg: "#f4ecd8", color: "#3d3229" }
+    };
+
+    // -----------------------------------------------------------
+    // Settings collapse
+    // -----------------------------------------------------------
+
+    toggleBtn.addEventListener("click", function () {
+        var open = settingsBody.classList.toggle("open");
+        toggleBtn.classList.toggle("open", open);
+    });
+
+    // -----------------------------------------------------------
+    // Apply a setting
+    // -----------------------------------------------------------
+
+    function applySetting(group, value) {
+        if (group === "font") {
+            transcript.style.fontSize = value;
+        } else if (group === "theme") {
+            var t = themes[value] || themes.dark;
+            container.style.background = t.bg;
+            container.style.color = t.color;
+            transcript.style.color = t.color || "";
+        } else if (group === "spacing") {
+            transcript.style.lineHeight = value;
+        }
+    }
+
+    // -----------------------------------------------------------
+    // Activate button in group
+    // -----------------------------------------------------------
+
+    function activateButton(group, value) {
+        var btns = document.querySelectorAll('.setting-btn[data-group="' + group + '"]');
+        for (var i = 0; i < btns.length; i++) {
+            if (btns[i].getAttribute("data-value") === value) {
+                btns[i].classList.add("active");
+            } else {
+                btns[i].classList.remove("active");
+            }
+        }
+    }
+
+    // -----------------------------------------------------------
+    // Load saved preferences
+    // -----------------------------------------------------------
+
+    function loadPrefs() {
+        var raw;
+        try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { return; }
+        if (!raw) return;
+        var prefs;
+        try { prefs = JSON.parse(raw); } catch (e) { return; }
+        if (prefs.font) { applySetting("font", prefs.font); activateButton("font", prefs.font); }
+        if (prefs.theme) { applySetting("theme", prefs.theme); activateButton("theme", prefs.theme); }
+        if (prefs.spacing) { applySetting("spacing", prefs.spacing); activateButton("spacing", prefs.spacing); }
+    }
+
+    // -----------------------------------------------------------
+    // Save preferences
+    // -----------------------------------------------------------
+
+    function savePrefs() {
+        var prefs = {};
+        var groups = ["font", "theme", "spacing"];
+        for (var g = 0; g < groups.length; g++) {
+            var active = document.querySelector('.setting-btn[data-group="' + groups[g] + '"].active');
+            if (active) {
+                prefs[groups[g]] = active.getAttribute("data-value");
+            }
+        }
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs)); } catch (e) { /* noop */ }
+    }
+
+    // -----------------------------------------------------------
+    // Button click handlers
+    // -----------------------------------------------------------
+
+    var allBtns = document.querySelectorAll(".setting-btn");
+    for (var i = 0; i < allBtns.length; i++) {
+        allBtns[i].addEventListener("click", function () {
+            var group = this.getAttribute("data-group");
+            var value = this.getAttribute("data-value");
+            activateButton(group, value);
+            applySetting(group, value);
+            savePrefs();
+        });
+    }
+
+    // -----------------------------------------------------------
+    // Init
+    // -----------------------------------------------------------
+
+    loadPrefs();
+})();
+</script>
 <script src="{{ url_for('static', filename='player.js') }}"></script>
 {% endblock %}
