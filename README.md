@@ -1,5 +1,16 @@
 # audioslop
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776ab.svg)](https://www.python.org)
+[![F5-TTS](https://img.shields.io/badge/TTS-F5--TTS-ff6b35.svg)](https://github.com/SWivid/F5-TTS)
+[![Whisper](https://img.shields.io/badge/QA-Whisper-74aa9c.svg)](https://github.com/openai/whisper)
+[![GitHub issues](https://img.shields.io/github/issues/jamditis/audioslop)](https://github.com/jamditis/audioslop/issues)
+[![GitHub last commit](https://img.shields.io/github/last-commit/jamditis/audioslop)](https://github.com/jamditis/audioslop/commits/master)
+
+<p align="center">
+  <img src="docs/og-image.png" alt="audioslop -- document to audiobook pipeline" width="800">
+</p>
+
 A document-to-audiobook pipeline with a web UI. Upload documents, clean text for TTS, generate audio with voice cloning, and listen with a synced transcript player that highlights words as they're spoken.
 
 ## What it does
