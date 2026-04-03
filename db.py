@@ -1,5 +1,6 @@
 """SQLite database layer for audioslop job tracking."""
 
+import secrets
 import sqlite3
 import uuid
 from typing import Optional
@@ -17,6 +18,24 @@ def init_db(db_path: str) -> None:
     conn = _connect(db_path)
     with conn:
         conn.executescript("""
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                name TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                is_admin INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                invite_id TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS invites (
+                id TEXT PRIMARY KEY,
+                token TEXT UNIQUE NOT NULL,
+                created_by TEXT NOT NULL,
+                expires_at TIMESTAMP,
+                used_by TEXT,
+                used_at TIMESTAMP
+            );
+
             CREATE TABLE IF NOT EXISTS jobs (
                 id TEXT PRIMARY KEY,
                 filename TEXT NOT NULL,
@@ -31,7 +50,8 @@ def init_db(db_path: str) -> None:
                 segments_total INTEGER DEFAULT 0,
                 final_audio TEXT,
                 error_msg TEXT,
-                error_detail TEXT
+                error_detail TEXT,
+                user_id TEXT
             );
 
             CREATE TABLE IF NOT EXISTS segments (
@@ -59,6 +79,7 @@ def create_job(
     voice_ref: str = "amditis.wav",
     title_pause: float = 2.0,
     para_pause: float = 0.75,
+    user_id: Optional[str] = None,
 ) -> str:
     """Create a new job and return its id (uuid hex[:12])."""
     job_id = uuid.uuid4().hex[:12]
@@ -66,10 +87,10 @@ def create_job(
     with conn:
         conn.execute(
             """
-            INSERT INTO jobs (id, filename, speed, voice_ref, title_pause, para_pause)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO jobs (id, filename, speed, voice_ref, title_pause, para_pause, user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (job_id, filename, speed, voice_ref, title_pause, para_pause),
+            (job_id, filename, speed, voice_ref, title_pause, para_pause, user_id),
         )
     conn.close()
     return job_id
@@ -95,12 +116,18 @@ def update_job(db_path: str, job_id: str, **fields) -> None:
     conn.close()
 
 
-def list_jobs(db_path: str, limit: int = 50) -> list[dict]:
-    """Return jobs ordered newest first."""
+def list_jobs(db_path: str, limit: int = 50, user_id: Optional[str] = None) -> list[dict]:
+    """Return jobs ordered newest first. Optionally filter by user_id."""
     conn = _connect(db_path)
-    rows = conn.execute(
-        "SELECT * FROM jobs ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
-    ).fetchall()
+    if user_id is not None:
+        rows = conn.execute(
+            "SELECT * FROM jobs WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
+            (user_id, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM jobs ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
+        ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
@@ -158,4 +185,134 @@ def delete_job_cascade(db_path: str, job_id: str) -> None:
     conn = _connect(db_path)
     with conn:
         conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# User CRUD
+# ---------------------------------------------------------------------------
+
+def create_user(
+    db_path: str,
+    name: str,
+    password_hash: str,
+    is_admin: int = 0,
+    invite_id: Optional[str] = None,
+) -> str:
+    """Create a new user and return its id (uuid hex[:12])."""
+    user_id = uuid.uuid4().hex[:12]
+    conn = _connect(db_path)
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO users (id, name, password_hash, is_admin, invite_id)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (user_id, name, password_hash, is_admin, invite_id),
+        )
+    conn.close()
+    return user_id
+
+
+def get_user_by_id(db_path: str, user_id: str) -> Optional[dict]:
+    """Return user as dict or None if not found."""
+    conn = _connect(db_path)
+    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_user_by_name(db_path: str, name: str) -> Optional[dict]:
+    """Return user as dict or None if not found."""
+    conn = _connect(db_path)
+    row = conn.execute("SELECT * FROM users WHERE name = ?", (name,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def list_users(db_path: str) -> list[dict]:
+    """Return all users ordered by created_at ascending."""
+    conn = _connect(db_path)
+    rows = conn.execute("SELECT * FROM users ORDER BY created_at ASC, rowid ASC").fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def delete_user(db_path: str, user_id: str) -> None:
+    """Delete a user by id. No-op if not found."""
+    conn = _connect(db_path)
+    with conn:
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.close()
+
+
+def count_users(db_path: str) -> int:
+    """Return total number of users."""
+    conn = _connect(db_path)
+    count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    conn.close()
+    return count
+
+
+# ---------------------------------------------------------------------------
+# Invite CRUD
+# ---------------------------------------------------------------------------
+
+def create_invite(
+    db_path: str,
+    created_by: str,
+    expires_at: Optional[str] = None,
+) -> dict:
+    """Create an invite and return a dict with id and token."""
+    invite_id = uuid.uuid4().hex[:12]
+    token = secrets.token_urlsafe(24)
+    conn = _connect(db_path)
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO invites (id, token, created_by, expires_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (invite_id, token, created_by, expires_at),
+        )
+    conn.close()
+    return {"id": invite_id, "token": token}
+
+
+def get_invite_by_token(db_path: str, token: str) -> Optional[dict]:
+    """Return invite as dict or None if not found."""
+    conn = _connect(db_path)
+    row = conn.execute("SELECT * FROM invites WHERE token = ?", (token,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def list_invites(db_path: str) -> list[dict]:
+    """Return all invites ordered by rowid ascending."""
+    conn = _connect(db_path)
+    rows = conn.execute("SELECT * FROM invites ORDER BY rowid ASC").fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def use_invite(db_path: str, token: str, used_by: str) -> None:
+    """Mark an invite as used. No-op if token not found."""
+    conn = _connect(db_path)
+    with conn:
+        conn.execute(
+            """
+            UPDATE invites
+            SET used_by = ?, used_at = CURRENT_TIMESTAMP
+            WHERE token = ?
+            """,
+            (used_by, token),
+        )
+    conn.close()
+
+
+def delete_invite(db_path: str, invite_id: str) -> None:
+    """Delete an invite by id. No-op if not found."""
+    conn = _connect(db_path)
+    with conn:
+        conn.execute("DELETE FROM invites WHERE id = ?", (invite_id,))
     conn.close()
