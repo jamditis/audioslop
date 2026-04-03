@@ -1,21 +1,24 @@
 {% extends "base.html" %}
-{% block title %}Log in - audioslop{% endblock %}
+{% block title %}Sign up - audioslop{% endblock %}
 {% block content %}
 <div style="max-width: 360px; margin: 8rem auto 0;" class="animate-in">
-    <h1 style="margin-bottom: 0.25rem;">audioslop</h1>
-    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2.5rem;">Document to audiobook</p>
+    <h1 style="margin-bottom: 0.25rem;">You're invited</h1>
+    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2.5rem;">Create your account to start making audiobooks.</p>
     {% if error %}
     <p style="color: var(--error); font-size: 0.85rem; margin-bottom: 1rem;">{{ error }}</p>
     {% endif %}
-    <form method="POST" action="/login">
+    <form method="POST" action="/invite/{{ token }}">
         <input type="text" name="username" placeholder="Username"
                class="input" style="margin-bottom: 0.75rem;" autofocus required
                autocomplete="username">
         <input type="password" name="password" placeholder="Password"
+               class="input" style="margin-bottom: 0.75rem;" required
+               autocomplete="new-password">
+        <input type="password" name="confirm_password" placeholder="Confirm password"
                class="input" style="margin-bottom: 1rem;" required
-               autocomplete="current-password">
+               autocomplete="new-password">
         <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">
-            Log in
+            Create account
         </button>
     </form>
 </div>

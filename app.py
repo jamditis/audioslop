@@ -15,17 +15,30 @@ from flask import (
     session,
     url_for,
 )
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from activity import log_activity, read_activity
 from db import (
+    count_users,
+    create_invite,
     create_job,
+    create_segment,
+    create_user,
+    delete_invite,
     delete_job_cascade,
+    delete_user,
+    get_invite_by_token,
     get_job,
     get_segments,
+    get_user_by_id,
+    get_user_by_name,
     init_db,
+    list_invites,
     list_jobs,
+    list_users,
     update_job,
     update_segment,
+    use_invite,
 )
 
 BASE_DIR = Path(__file__).parent
@@ -38,14 +51,27 @@ ALLOWED_EXTENSIONS = {".docx", ".pdf", ".srt", ".txt", ".md"}
 app = Flask(__name__)
 app.secret_key = os.environ.get("AUDIOSLOP_SECRET", "dev-secret-change-me")
 
-PASSWORD = os.environ.get("AUDIOSLOP_PASSWORD", "audioslop")
+WORKER_API_KEY = os.environ.get("AUDIOSLOP_WORKER_KEY", "dev-worker-key")
 
 
 def require_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not session.get("authed"):
+        if not session.get("user_id"):
+            if count_users(DB_PATH) == 0:
+                return redirect(url_for("setup"))
             return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
+
+
+def require_admin(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("user_id"):
+            return redirect(url_for("login"))
+        if not session.get("is_admin"):
+            return "Forbidden.", 403
         return f(*args, **kwargs)
     return decorated
 
@@ -54,14 +80,65 @@ def require_auth(f):
 # Auth
 # ---------------------------------------------------------------------------
 
+@app.route("/setup", methods=["GET", "POST"])
+def setup():
+    if count_users(DB_PATH) > 0:
+        return redirect(url_for("login"))
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm_password", "")
+        if not username or not password:
+            return render_template("setup.html", error="Username and password are required.")
+        if password != confirm:
+            return render_template("setup.html", error="Passwords do not match.")
+        password_hash = generate_password_hash(password)
+        user_id = create_user(DB_PATH, name=username, password_hash=password_hash, is_admin=1)
+        session["user_id"] = user_id
+        session["user_name"] = username
+        session["is_admin"] = True
+        return redirect(url_for("index"))
+    return render_template("setup.html")
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        if request.form.get("password") == PASSWORD:
-            session["authed"] = True
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        user = get_user_by_name(DB_PATH, username)
+        if user and check_password_hash(user["password_hash"], password):
+            session["user_id"] = user["id"]
+            session["user_name"] = user["name"]
+            session["is_admin"] = bool(user["is_admin"])
             return redirect(url_for("index"))
-        return render_template("login.html", error="Wrong password.")
+        return render_template("login.html", error="Invalid username or password.")
     return render_template("login.html")
+
+
+@app.route("/invite/<token>", methods=["GET", "POST"])
+def invite_signup(token):
+    invite = get_invite_by_token(DB_PATH, token)
+    if not invite or invite["used_by"]:
+        return render_template("signup.html", token=token, error="This invite link is invalid or has already been used.")
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm_password", "")
+        if not username or not password:
+            return render_template("signup.html", token=token, error="Username and password are required.")
+        if password != confirm:
+            return render_template("signup.html", token=token, error="Passwords do not match.")
+        if get_user_by_name(DB_PATH, username):
+            return render_template("signup.html", token=token, error="That username is taken.")
+        password_hash = generate_password_hash(password)
+        user_id = create_user(DB_PATH, name=username, password_hash=password_hash, is_admin=0, invite_id=invite["id"])
+        use_invite(DB_PATH, token=token, used_by=user_id)
+        session["user_id"] = user_id
+        session["user_name"] = username
+        session["is_admin"] = False
+        return redirect(url_for("index"))
+    return render_template("signup.html", token=token)
 
 
 @app.route("/logout")
@@ -77,7 +154,10 @@ def logout():
 @app.route("/")
 @require_auth
 def index():
-    jobs = list_jobs(DB_PATH)
+    if session.get("is_admin"):
+        jobs = list_jobs(DB_PATH)
+    else:
+        jobs = list_jobs(DB_PATH, user_id=session.get("user_id"))
     voices = sorted(p.name for p in REF_DIR.glob("*.wav"))
     return render_template("upload.html", jobs=jobs, voices=voices)
 
@@ -132,6 +212,7 @@ def api_upload():
         voice_ref=voice_ref,
         title_pause=title_pause,
         para_pause=para_pause,
+        user_id=session.get("user_id"),
     )
 
     UPLOAD_DIR.mkdir(exist_ok=True)
