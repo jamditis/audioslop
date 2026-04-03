@@ -88,6 +88,15 @@ def require_worker_auth(f):
     return decorated
 
 
+def check_job_access(job):
+    """Return True if the current user can access this job."""
+    if not job:
+        return False
+    if session.get("is_admin"):
+        return True
+    return job.get("user_id") == session.get("user_id")
+
+
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
@@ -115,6 +124,8 @@ def setup():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    if count_users(DB_PATH) == 0:
+        return redirect(url_for("setup"))
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
@@ -133,6 +144,13 @@ def invite_signup(token):
     invite = get_invite_by_token(DB_PATH, token)
     if not invite or invite["used_by"]:
         return render_template("signup.html", token=token, error="This invite link is invalid or has already been used.")
+    if invite.get("expires_at"):
+        try:
+            exp = datetime.fromisoformat(invite["expires_at"])
+            if datetime.utcnow() > exp:
+                return render_template("login.html", error="This invite link has expired.")
+        except (ValueError, TypeError):
+            pass
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
@@ -178,7 +196,7 @@ def index():
 @require_auth
 def job_review(job_id):
     job = get_job(DB_PATH, job_id)
-    if not job:
+    if not check_job_access(job):
         return "Job not found.", 404
     segments = get_segments(DB_PATH, job_id)
     job_dir = JOBS_DIR / job_id
@@ -190,7 +208,7 @@ def job_review(job_id):
 @require_auth
 def job_player(job_id):
     job = get_job(DB_PATH, job_id)
-    if not job:
+    if not check_job_access(job):
         return "Job not found.", 404
     return render_template("player.html", job=job)
 
@@ -302,7 +320,7 @@ def api_upload():
 @require_auth
 def api_job_status(job_id):
     job = get_job(DB_PATH, job_id)
-    if not job:
+    if not check_job_access(job):
         return jsonify({"error": "Job not found."}), 404
     return jsonify({
         "status": job["status"],
@@ -318,7 +336,7 @@ def api_job_status(job_id):
 @require_auth
 def api_job_segments(job_id):
     job = get_job(DB_PATH, job_id)
-    if not job:
+    if not check_job_access(job):
         return jsonify({"error": "Job not found."}), 404
     segments = get_segments(DB_PATH, job_id)
     return jsonify(segments)
@@ -328,7 +346,7 @@ def api_job_segments(job_id):
 @require_auth
 def api_update_segment_text(job_id, index):
     job = get_job(DB_PATH, job_id)
-    if not job:
+    if not check_job_access(job):
         return jsonify({"error": "Job not found."}), 404
 
     data = request.get_json(silent=True) or {}
@@ -344,7 +362,7 @@ def api_update_segment_text(job_id, index):
 @require_auth
 def api_synthesize(job_id):
     job = get_job(DB_PATH, job_id)
-    if not job:
+    if not check_job_access(job):
         return jsonify({"error": "Job not found."}), 404
 
     if job["status"] not in ("review", "failed"):
@@ -360,7 +378,7 @@ def api_synthesize(job_id):
 @require_auth
 def api_delete_job(job_id):
     job = get_job(DB_PATH, job_id)
-    if not job:
+    if not check_job_access(job):
         return jsonify({"error": "Job not found."}), 404
 
     job_dir = JOBS_DIR / job_id
@@ -379,7 +397,7 @@ def api_delete_job(job_id):
 @require_auth
 def api_cancel_job(job_id):
     job = get_job(DB_PATH, job_id)
-    if not job:
+    if not check_job_access(job):
         return jsonify({"error": "Job not found."}), 404
 
     update_job(DB_PATH, job_id, status="cancelled")
@@ -391,9 +409,11 @@ def api_cancel_job(job_id):
 @app.route("/api/job/<job_id>/audio/<path:filename>")
 @require_auth
 def api_serve_audio(job_id, filename):
+    job = get_job(DB_PATH, job_id)
+    if not check_job_access(job):
+        return jsonify({"error": "Job not found."}), 404
     from r2 import presigned_url
-    r2_key = job_id + "/" + filename
-    url = presigned_url(r2_key)
+    url = presigned_url(filename)
     return redirect(url)
 
 
@@ -401,7 +421,9 @@ def api_serve_audio(job_id, filename):
 @require_auth
 def api_audio_url(job_id):
     job = get_job(DB_PATH, job_id)
-    if not job or not job["final_audio"]:
+    if not check_job_access(job):
+        return jsonify({"error": "Job not found."}), 404
+    if not job["final_audio"]:
         return jsonify({"error": "Audio not ready."}), 404
     from r2 import presigned_url
     url = presigned_url(job["final_audio"])
@@ -551,9 +573,11 @@ def api_worker_segment_complete(job_id, seg_index):
     )
 
     # Recalculate progress from DB to avoid races
-    segments_done = job["segments_done"] + 1
-    segments_total = job["segments_total"] or 1
-    progress_pct = int(segments_done / segments_total * 100)
+    segments = get_segments(DB_PATH, job_id)
+    segments_done = sum(1 for s in segments if s["audio_file"])
+    segments_total = job["segments_total"] or len(segments)
+    progress_pct = int(segments_done / segments_total * 100) if segments_total else 0
+    progress_pct = min(progress_pct, 100)
     update_job(DB_PATH, job_id, segments_done=segments_done, progress_pct=progress_pct)
 
     job_dir = JOBS_DIR / job_id

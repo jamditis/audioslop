@@ -45,7 +45,7 @@ def cmd_create_invite(args):
         sys.exit(1)
 
     invite = create_invite(DB_PATH, admin["id"])
-    invite_url = f"{base_url}/signup?invite={invite['token']}"
+    invite_url = f"{base_url}/invite/{invite['token']}"
     print(invite_url)
 
 

@@ -16,9 +16,10 @@ import logging
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import traceback
-import wave
+import wave as wave_mod
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -180,11 +181,14 @@ class RemoteWorker:
 
     def heartbeat(self, current_job_id: str | None = None) -> None:
         """Report GPU status to the server."""
+        import socket
         gpu = get_gpu_info()
         payload = {
-            "worker": "legion2025",
+            "hostname": socket.gethostname(),
+            "gpu_name": gpu.get("name"),
+            "gpu_memory_used_mb": gpu.get("used_mb"),
+            "gpu_memory_total_mb": gpu.get("total_mb"),
             "current_job": current_job_id,
-            "gpu": gpu,
         }
         try:
             self._post("/api/worker/heartbeat", json=payload)
@@ -305,12 +309,26 @@ class RemoteWorker:
 
             # Skip segments that already have audio (retry support)
             if seg.get("audio_file"):
-                log.debug("seg %d already has audio -- skipping", idx)
-                # We don't have the PCM locally, so we can't re-add to all_parts.
-                # The full concat will come from segments that were synthesised
-                # this run; previously done segments are excluded. This is
-                # acceptable: partial retries produce the new full.wav from
-                # whatever was synthesised this run.
+                log.debug("seg %d already has audio -- downloading for concat", idx)
+                try:
+                    from r2 import presigned_url as r2_presign
+                    url = r2_presign(seg["audio_file"])
+                    resp = requests.get(url, timeout=60)
+                    resp.raise_for_status()
+                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                        tmp.write(resp.content)
+                        tmp_path = tmp.name
+                    with wave_mod.open(tmp_path, "rb") as wf:
+                        existing_pcm = wf.readframes(wf.getnframes())
+                    os.unlink(tmp_path)
+                    all_parts.append(existing_pcm)
+                    if pause_after > 0:
+                        all_parts.append(generate_silence(pause_after))
+                except Exception:
+                    log.warning("could not download segment %d for resume, using silence", idx)
+                    all_parts.append(generate_silence(0.5))
+                    if pause_after > 0:
+                        all_parts.append(generate_silence(pause_after))
                 continue
 
             # Cancellation check before each segment
@@ -388,7 +406,7 @@ class RemoteWorker:
             # Save locally and upload to R2
             seg_filename = f"seg_{idx:04d}.wav"
             local_wav = local_job_dir / seg_filename
-            with wave.open(str(local_wav), "wb") as w:
+            with wave_mod.open(str(local_wav), "wb") as w:
                 w.setnchannels(1)
                 w.setsampwidth(2)
                 w.setframerate(TARGET_SAMPLE_RATE)
