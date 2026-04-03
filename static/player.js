@@ -75,7 +75,7 @@
 
           if (words.length > 0 && seg.source_text) {
             // Use source text words with Whisper timing data
-            var sourceWords = seg.source_text.split(/\s+/);
+            var sourceWords = seg.source_text.trim().split(/\s+/).filter(function (w) { return w; });
             sourceWords.forEach(function (srcWord, wIdx) {
               var span = document.createElement("span");
               span.className = "word";
@@ -319,8 +319,13 @@
   // -----------------------------------------------------------------------
 
   document.addEventListener("keydown", function (e) {
-    // Don't capture if user is in an input/textarea
-    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
+    // Don't capture when focus is on interactive elements or modifier keys are held
+    var tag = e.target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
+        tag === "BUTTON" || tag === "A" ||
+        e.target.getAttribute("role") === "button" ||
+        e.target.isContentEditable ||
+        e.metaKey || e.ctrlKey || e.altKey) return;
 
     switch (e.code) {
       case "Space":
