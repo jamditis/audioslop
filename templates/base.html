@@ -15,8 +15,14 @@
 <body>
     <nav class="nav-bar">
         <a href="/" class="nav-brand">audioslop</a>
-        {% if session.get('authed') %}
-        <a href="/logout" class="nav-link">log out</a>
+        {% if session.get('user_id') %}
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            {% if session.get('is_admin') %}
+            <a href="/admin" class="nav-link">admin</a>
+            {% endif %}
+            <span style="color: var(--text-muted); font-size: 0.85rem;">{{ session.get('user_name') }}</span>
+            <a href="/logout" class="nav-link">log out</a>
+        </div>
         {% endif %}
     </nav>
     {% block body %}
