@@ -239,7 +239,13 @@
         if (!selectedFile) return;
 
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Uploading...';
+        while (submitBtn.firstChild) submitBtn.removeChild(submitBtn.firstChild);
+        var spinEl = document.createElement('span');
+        spinEl.className = 'spinner';
+        spinEl.style.marginRight = '8px';
+        spinEl.style.verticalAlign = 'middle';
+        submitBtn.appendChild(spinEl);
+        submitBtn.appendChild(document.createTextNode('Uploading...'));
 
         var formData = new FormData();
         formData.append('file', selectedFile);

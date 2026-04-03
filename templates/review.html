@@ -132,9 +132,9 @@
     <div class="border-t border-gray-800 divide-y divide-gray-900">
         {% for entry in activities %}
         <div class="px-4 py-2 flex items-start gap-4 text-xs">
-            <span class="text-gray-600 shrink-0 font-mono">{{ entry.timestamp }}</span>
-            <span class="{% if entry.event == 'error' %}text-red-400{% else %}text-gray-400{% endif %}">
-                {{ entry.message }}
+            <span class="text-gray-500 shrink-0 font-mono">{{ entry.ts }}</span>
+            <span class="{% if entry.event == 'error' %}text-red-400{% else %}text-gray-300{% endif %}">
+                {{ entry.msg }}
             </span>
         </div>
         {% endfor %}
