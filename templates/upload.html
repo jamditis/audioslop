@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+
+{% block title %}upload — audioslop{% endblock %}
+
+{% block content %}
+<div class="space-y-10">
+
+    <!-- Upload section -->
+    <section>
+        <h1 class="text-2xl font-semibold mb-6">Upload a document</h1>
+
+        <div id="upload-form" class="space-y-6">
+
+            <!-- Drop zone -->
+            <div class="drop-zone" id="drop-zone">
+                <input type="file" id="file-input" accept=".docx,.pdf,.srt,.txt,.md" class="hidden">
+                <p class="text-gray-300 text-base mb-1">Drag and drop a file here, or click to browse</p>
+                <p class="text-gray-500 text-sm">.docx, .pdf, .srt, .txt, .md</p>
+                <p id="file-name-display" class="mt-3 text-blue-400 text-sm font-medium hidden"></p>
+            </div>
+
+            <!-- Settings grid -->
+            <div class="grid grid-cols-2 gap-6">
+
+                <!-- Speed -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label for="speed" class="text-sm text-gray-400">Speed</label>
+                        <span id="speed-display" class="text-sm font-mono text-gray-200">0.85x</span>
+                    </div>
+                    <input
+                        type="range"
+                        id="speed"
+                        name="speed"
+                        min="0.5" max="1.5" step="0.05" value="0.85"
+                        class="w-full accent-blue-500"
+                    >
+                </div>
+
+                <!-- Voice -->
+                <div class="space-y-2">
+                    <label for="voice-ref" class="block text-sm text-gray-400">Voice</label>
+                    <select
+                        id="voice-ref"
+                        name="voice_ref"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        {% for voice in voices %}
+                        <option value="{{ voice }}"{% if voice == 'amditis.wav' %} selected{% endif %}>{{ voice }}</option>
+                        {% endfor %}
+                        {% if not voices %}
+                        <option value="">No voices found</option>
+                        {% endif %}
+                    </select>
+                </div>
+
+                <!-- Title pause -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label for="title-pause" class="text-sm text-gray-400">Title pause</label>
+                        <span id="title-pause-display" class="text-sm font-mono text-gray-200">2.0s</span>
+                    </div>
+                    <input
+                        type="range"
+                        id="title-pause"
+                        name="title_pause"
+                        min="0.5" max="5.0" step="0.25" value="2.0"
+                        class="w-full accent-blue-500"
+                    >
+                </div>
+
+                <!-- Paragraph pause -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label for="para-pause" class="text-sm text-gray-400">Paragraph pause</label>
+                        <span id="para-pause-display" class="text-sm font-mono text-gray-200">0.75s</span>
+                    </div>
+                    <input
+                        type="range"
+                        id="para-pause"
+                        name="para_pause"
+                        min="0.25" max="3.0" step="0.25" value="0.75"
+                        class="w-full accent-blue-500"
+                    >
+                </div>
+
+            </div>
+
+            <!-- Submit -->
+            <div>
+                <button
+                    id="submit-btn"
+                    disabled
+                    class="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white text-sm font-medium rounded-md transition-colors"
+                >
+                    Process
+                </button>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- Job list section -->
+    <section>
+        <h2 class="text-xl font-semibold mb-4">Recent jobs</h2>
+
+        {% if jobs %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-gray-800 text-left text-gray-400">
+                        <th class="pb-3 pr-6 font-medium">File</th>
+                        <th class="pb-3 pr-6 font-medium">Status</th>
+                        <th class="pb-3 pr-6 font-medium">Created</th>
+                        <th class="pb-3 font-medium">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800">
+                    {% for job in jobs %}
+                    <tr class="text-gray-300">
+                        <td class="py-3 pr-6 max-w-xs truncate" title="{{ job.filename }}">{{ job.filename }}</td>
+                        <td class="py-3 pr-6">
+                            <span class="badge badge-{{ job.status }}">{{ job.status }}</span>
+                        </td>
+                        <td class="py-3 pr-6 text-gray-400 whitespace-nowrap">{{ job.created_at }}</td>
+                        <td class="py-3">
+                            <div class="flex items-center gap-3">
+                                {% if job.status == 'done' %}
+                                <a href="/job/{{ job.id }}/player" class="text-blue-400 hover:text-blue-300">Play</a>
+                                {% endif %}
+                                <a href="/job/{{ job.id }}" class="text-gray-400 hover:text-gray-200">Review</a>
+                                <button
+                                    class="delete-btn text-red-500 hover:text-red-400"
+                                    data-job-id="{{ job.id }}"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-gray-500 text-sm">No jobs yet. Upload a document to get started.</p>
+        {% endif %}
+    </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+
+    // --- Slider value displays ---
+    const sliders = [
+        { input: document.getElementById('speed'),       display: document.getElementById('speed-display'),       suffix: 'x' },
+        { input: document.getElementById('title-pause'), display: document.getElementById('title-pause-display'), suffix: 's' },
+        { input: document.getElementById('para-pause'),  display: document.getElementById('para-pause-display'),  suffix: 's' },
+    ];
+
+    sliders.forEach(function (s) {
+        s.input.addEventListener('input', function () {
+            s.display.textContent = parseFloat(s.input.value).toFixed(2).replace(/\.?0+$/, function (m, o, str) {
+                // keep at least one decimal place for readability
+                return str.indexOf('.') === -1 ? '' : m;
+            }) + s.suffix;
+        });
+    });
+
+    function formatSliderValue(val, suffix) {
+        var n = parseFloat(val);
+        // Always show one decimal place minimum
+        var str = n % 1 === 0 ? n.toFixed(1) : n.toString();
+        return str + suffix;
+    }
+
+    // Re-init display text using formatter
+    sliders.forEach(function (s) {
+        s.display.textContent = formatSliderValue(s.input.value, s.suffix);
+        s.input.addEventListener('input', function () {
+            s.display.textContent = formatSliderValue(s.input.value, s.suffix);
+        });
+    });
+
+    // --- File selection state ---
+    var selectedFile = null;
+    var fileInput = document.getElementById('file-input');
+    var dropZone = document.getElementById('drop-zone');
+    var fileNameDisplay = document.getElementById('file-name-display');
+    var submitBtn = document.getElementById('submit-btn');
+
+    function setFile(file) {
+        if (!file) return;
+        selectedFile = file;
+        fileNameDisplay.textContent = file.name;
+        fileNameDisplay.classList.remove('hidden');
+        submitBtn.disabled = false;
+    }
+
+    // Click drop zone opens file picker
+    dropZone.addEventListener('click', function () {
+        fileInput.click();
+    });
+
+    fileInput.addEventListener('change', function () {
+        if (fileInput.files.length > 0) {
+            setFile(fileInput.files[0]);
+        }
+    });
+
+    // --- Drag and drop ---
+    dropZone.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', function (e) {
+        // Only remove class if leaving the zone itself, not a child
+        if (!dropZone.contains(e.relatedTarget)) {
+            dropZone.classList.remove('drag-over');
+        }
+    });
+
+    dropZone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        var files = e.dataTransfer.files;
+        if (files.length > 0) {
+            setFile(files[0]);
+        }
+    });
+
+    // --- Upload ---
+    submitBtn.addEventListener('click', function () {
+        if (!selectedFile) return;
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Uploading...';
+
+        var formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('speed', document.getElementById('speed').value);
+        formData.append('voice_ref', document.getElementById('voice-ref').value);
+        formData.append('title_pause', document.getElementById('title-pause').value);
+        formData.append('para_pause', document.getElementById('para-pause').value);
+
+        fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+        })
+        .then(function (res) {
+            return res.json().then(function (data) {
+                return { ok: res.ok, data: data };
+            });
+        })
+        .then(function (result) {
+            if (result.ok && result.data.job_id) {
+                window.location.href = '/job/' + result.data.job_id;
+            } else {
+                var msg = (result.data && result.data.error) ? result.data.error : 'Upload failed.';
+                alert(msg);
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Process';
+            }
+        })
+        .catch(function (err) {
+            alert('Upload failed: ' + err.message);
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Process';
+        });
+    });
+
+    // --- Delete ---
+    document.querySelectorAll('.delete-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var jobId = btn.getAttribute('data-job-id');
+            if (!confirm('Delete this job? This cannot be undone.')) return;
+
+            fetch('/api/job/' + jobId, { method: 'DELETE' })
+            .then(function (res) {
+                if (res.ok) {
+                    window.location.reload();
+                } else {
+                    return res.json().then(function (data) {
+                        alert((data && data.error) ? data.error : 'Delete failed.');
+                    });
+                }
+            })
+            .catch(function (err) {
+                alert('Delete failed: ' + err.message);
+            });
+        });
+    });
+
+}());
+</script>
+{% endblock %}

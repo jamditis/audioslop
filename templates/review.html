@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}{{ job.filename }} -- audioslop{% endblock %}
+
+{% block content %}
+{# Header row #}
+<div class="flex items-start justify-between gap-4 mb-6">
+    <div class="flex items-center gap-3 flex-wrap">
+        <h1 class="text-xl font-semibold text-gray-100">{{ job.filename }}</h1>
+        <span class="badge badge-{{ job.status }}">{{ job.status }}</span>
+    </div>
+    <div class="flex items-center gap-3 shrink-0">
+        {% if job.status == "done" %}
+        <a href="{{ url_for('job_player', job_id=job.id) }}"
+           class="px-4 py-2 rounded-lg bg-green-700 hover:bg-green-600 text-white text-sm font-medium transition-colors">
+            Play
+        </a>
+        {% endif %}
+        <a href="{{ url_for('index') }}"
+           class="text-sm text-gray-400 hover:text-gray-200 transition-colors">
+            &larr; Back
+        </a>
+    </div>
+</div>
+
+{# Status message bar #}
+{% if job.status == "pending" %}
+<div class="mb-6 px-4 py-3 rounded-lg bg-gray-800 text-gray-300 text-sm">
+    Waiting in line -- your file will be processed shortly.
+</div>
+{% elif job.status == "cleaning" %}
+<div class="mb-6 px-4 py-3 rounded-lg bg-blue-950 border border-blue-800 text-blue-300 text-sm">
+    Reading and preparing your document for audio...
+</div>
+{% elif job.status == "review" %}
+<div class="mb-6 px-4 py-3 rounded-lg bg-gray-800 text-gray-300 text-sm">
+    Ready for review. Check the text below and click Generate when you're ready.
+</div>
+{% elif job.status == "synthesizing" %}
+<div class="mb-6 px-4 py-3 rounded-lg bg-amber-950 border border-amber-800 text-amber-300 text-sm">
+    Generating audio...
+</div>
+{% elif job.status == "done" %}
+<div class="mb-6 px-4 py-3 rounded-lg bg-green-950 border border-green-800 text-green-300 text-sm">
+    Your audiobook is ready. Click Play to listen.
+</div>
+{% elif job.status == "failed" %}
+<div class="mb-6 px-4 py-3 rounded-lg bg-red-950 border border-red-800 text-red-300 text-sm">
+    <p class="font-medium">{{ job.error_msg or "An error occurred." }}</p>
+    {% if job.error_detail %}
+    <details class="mt-2">
+        <summary class="cursor-pointer text-red-400 hover:text-red-200 select-none">Show technical details</summary>
+        <pre class="mt-2 text-xs text-red-300 bg-red-950 border border-red-900 rounded p-3 overflow-x-auto whitespace-pre-wrap select-all">{{ job.error_detail }}</pre>
+    </details>
+    {% endif %}
+</div>
+{% elif job.status == "cancelled" %}
+<div class="mb-6 px-4 py-3 rounded-lg bg-gray-800 text-gray-400 text-sm">
+    This job was cancelled.
+</div>
+{% endif %}
+
+{# Progress bar -- only shown when synthesizing #}
+{% if job.status == "synthesizing" %}
+<div class="mb-6" id="progress-section">
+    <div class="flex items-center justify-between text-sm text-gray-400 mb-1">
+        <span id="progress-label">Segment {{ job.segments_done }} of {{ job.segments_total }}</span>
+        <span id="progress-pct">{{ job.progress_pct }}%</span>
+    </div>
+    <div class="h-2 bg-gray-800 rounded-full overflow-hidden">
+        <div id="progress-bar"
+             class="h-full bg-amber-500 rounded-full transition-all duration-500"
+             style="width: {{ job.progress_pct }}%"></div>
+    </div>
+</div>
+{% endif %}
+
+{# Segments list #}
+<div class="space-y-4 mb-8">
+    {% for seg in segments %}
+    <div class="border border-gray-800 rounded-lg p-4">
+        {# Segment header #}
+        <div class="flex items-center gap-3 mb-3">
+            <span class="text-sm font-medium {% if seg.is_title %}text-gray-200{% else %}text-gray-400{% endif %}">
+                {% if seg.is_title %}Title{% else %}Paragraph{% endif %} {{ seg.seg_index + 1 }}
+            </span>
+            <span class="text-xs text-gray-600">{{ seg.chunk_file }}</span>
+            {% if seg.accuracy is not none %}
+            <span class="badge {% if seg.accuracy >= 0.9 %}bg-green-900 text-green-300{% else %}bg-yellow-900 text-yellow-300{% endif %}">
+                {{ "%.0f"|format(seg.accuracy * 100) }}% accuracy
+            </span>
+            {% endif %}
+        </div>
+        {# Editable textarea #}
+        <textarea
+            class="w-full bg-gray-900 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 resize-y leading-relaxed
+                   {% if job.status in ('review', 'failed') %}focus:outline-none focus:border-blue-600{% else %}opacity-60 cursor-default{% endif %}"
+            rows="3"
+            {% if job.status not in ('review', 'failed') %}readonly{% endif %}
+            onchange="saveSegment(JOB_ID, {{ seg.seg_index }}, this.value)"
+        >{{ seg.source_text }}</textarea>
+    </div>
+    {% endfor %}
+</div>
+
+{# Action buttons #}
+<div class="flex items-center gap-3 mb-8">
+    {% if job.status == "review" %}
+    <button onclick="startSynthesis(JOB_ID)"
+            class="px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium transition-colors">
+        Generate audio
+    </button>
+    {% elif job.status == "failed" %}
+    <button onclick="startSynthesis(JOB_ID)"
+            class="px-5 py-2 rounded-lg bg-blue-700 hover:bg-blue-600 text-white text-sm font-medium transition-colors">
+        Try again
+    </button>
+    {% elif job.status == "synthesizing" %}
+    <button onclick="cancelJob(JOB_ID)"
+            class="px-5 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium transition-colors">
+        Cancel
+    </button>
+    {% endif %}
+</div>
+
+{# Activity log #}
+{% if activities %}
+<details class="border border-gray-800 rounded-lg">
+    <summary class="px-4 py-3 cursor-pointer text-sm text-gray-400 hover:text-gray-200 select-none">
+        Activity log
+    </summary>
+    <div class="border-t border-gray-800 divide-y divide-gray-900">
+        {% for entry in activities %}
+        <div class="px-4 py-2 flex items-start gap-4 text-xs">
+            <span class="text-gray-600 shrink-0 font-mono">{{ entry.timestamp }}</span>
+            <span class="{% if entry.event == 'error' %}text-red-400{% else %}text-gray-400{% endif %}">
+                {{ entry.message }}
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+</details>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const JOB_ID = '{{ job.id }}';
+    const CURRENT_STATUS = '{{ job.status }}';
+
+    function saveSegment(jobId, index, text) {
+        fetch('/api/job/' + jobId + '/segments/' + index + '/text', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: text }),
+        }).catch(function(err) {
+            console.error('saveSegment failed:', err);
+        });
+    }
+
+    function startSynthesis(jobId) {
+        fetch('/api/job/' + jobId + '/synthesize', { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    window.location.reload();
+                } else {
+                    alert(data.error || 'Failed to start synthesis.');
+                }
+            })
+            .catch(function(err) {
+                console.error('startSynthesis failed:', err);
+            });
+    }
+
+    function cancelJob(jobId) {
+        if (!confirm('Cancel this job?')) return;
+        fetch('/api/job/' + jobId + '/cancel', { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    window.location.reload();
+                } else {
+                    alert(data.error || 'Failed to cancel job.');
+                }
+            })
+            .catch(function(err) {
+                console.error('cancelJob failed:', err);
+            });
+    }
+
+    // Polling: active when status is synthesizing or cleaning
+    if (CURRENT_STATUS === 'synthesizing' || CURRENT_STATUS === 'cleaning') {
+        var pollInterval = setInterval(function() {
+            fetch('/api/job/' + JOB_ID + '/status')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var terminal = ['done', 'failed', 'review', 'cancelled'];
+                    if (terminal.indexOf(data.status) !== -1) {
+                        clearInterval(pollInterval);
+                        window.location.reload();
+                        return;
+                    }
+                    // Update progress bar if present
+                    var bar = document.getElementById('progress-bar');
+                    var label = document.getElementById('progress-label');
+                    var pct = document.getElementById('progress-pct');
+                    if (bar && data.progress_pct != null) {
+                        bar.style.width = data.progress_pct + '%';
+                    }
+                    if (label && data.segments_done != null && data.segments_total != null) {
+                        label.textContent = 'Segment ' + data.segments_done + ' of ' + data.segments_total;
+                    }
+                    if (pct && data.progress_pct != null) {
+                        pct.textContent = data.progress_pct + '%';
+                    }
+                })
+                .catch(function(err) {
+                    console.error('poll failed:', err);
+                });
+        }, 2000);
+    }
+</script>
+{% endblock %}

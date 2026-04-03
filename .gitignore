@@ -1,0 +1,41 @@
+# Audio files (generated, large)
+audio/
+*.wav
+
+# Uploaded files
+uploads/
+
+# Job working directories
+jobs/
+
+# Voice reference clips (contain personal voice data)
+ref/
+
+# Source content (copyrighted material)
+content/
+
+# Processed output
+output/
+
+# Database
+*.db
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Environment
+.env
+
+# Windows
+desktop.ini
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

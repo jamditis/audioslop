@@ -1,0 +1,96 @@
+.badge {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+}
+
+.badge-pending {
+    background-color: rgb(55 65 81 / 0.5);
+    color: rgb(156 163 175);
+}
+
+.badge-cleaning {
+    background-color: rgb(30 58 138 / 0.5);
+    color: rgb(96 165 250);
+}
+
+.badge-review {
+    background-color: rgb(20 83 45 / 0.5);
+    color: rgb(74 222 128);
+}
+
+.badge-synthesizing {
+    background-color: rgb(120 53 15 / 0.5);
+    color: rgb(251 191 36);
+}
+
+.badge-done {
+    background-color: rgb(20 83 45 / 0.5);
+    color: rgb(74 222 128);
+}
+
+.badge-failed {
+    background-color: rgb(127 29 29 / 0.5);
+    color: rgb(248 113 113);
+}
+
+.badge-cancelled {
+    background-color: rgb(55 65 81 / 0.5);
+    color: rgb(156 163 175);
+}
+
+.word {
+    cursor: pointer;
+    border-radius: 2px;
+    padding: 0 1px;
+    transition: background-color 0.1s;
+}
+
+.word:hover {
+    background-color: rgb(55 65 81 / 0.5);
+}
+
+.word-current {
+    background-color: rgb(234 179 8);
+    color: rgb(0 0 0);
+    border-radius: 2px;
+    padding: 0 2px;
+}
+
+.word-spoken {
+    color: rgb(107 114 128);
+}
+
+.transcript-scroll {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.segment-divider {
+    border-top: 1px solid rgb(55 65 81);
+    margin: 1.5rem 0;
+}
+
+.segment-title {
+    font-weight: 600;
+    font-size: 1.125rem;
+    color: rgb(229 231 235);
+    margin-bottom: 0.5rem;
+}
+
+.drop-zone {
+    border: 2px dashed rgb(75 85 99);
+    border-radius: 0.75rem;
+    padding: 2rem;
+    text-align: center;
+    transition: border-color 0.15s, background-color 0.15s;
+    cursor: pointer;
+}
+
+.drop-zone.drag-over {
+    border-color: rgb(96 165 250);
+    background-color: rgb(30 58 138 / 0.15);
+}
